@@ -73,18 +73,25 @@ if __name__ == "__main__":
     src_folder_id = args.src
     dst_folder_id = args.dst
     service = None
-    args.mission = "saveto"
+    args.mission = "test"
     service = GetService(
-        "account/sa/19c3ada8792dafc0d0928673c35ff27b07a59b46.json")
-    temp_folder_id = "18ftr9eVbX1ncYx6jxgPrlv6Wpp33SMrw"
-    temp_folder_id2 = "1eSUI4GXs0Jr9UAP4mZQG7VWQDv-i8EWB"
+        "account/sa/003bda3ab4fd5ddd53d433f928ec5ec08c9fa57d.json")
+    temp_folder_id = "1eSUI4GXs0Jr9UAP4mZQG7VWQDv-i8EWB"
+    temp_folder_id2 = "10peMHnGT7yMpmFKV2xZzqH32DiuFXGg9"
     src_folder_id = temp_folder_id
     dst_folder_id = temp_folder_id2
 
     print("*current mission:", args.mission)
+
+    if not args.user_account:
+        SAManage.read_sa_files(r"account/test_sa")
     if args.mission == "show":
-        result = Get(service, src_folder_id)
-        ListAll(service, result)
+        #result = Get(service, src_folder_id)
+        #ListAll(service, result)
+        with SAManage.request() as sa_info:
+            service = sa_info.service
+            src_info = AddFirst(service, src_folder_id, dst_folder_id)
+        AsynListAll(worker=10)
         #show_all()
         statistics_file_information()
         save_cache()
@@ -94,5 +101,15 @@ if __name__ == "__main__":
 
     if args.mission == "saveto":
         #SaveTo(service, src_folder_id, dst_folder_id)
-        SAManage.read_sa_files(r"account/sa")
-        AsynSaveTo(src_folder_id, dst_folder_id, 5)
+        AsynSaveTo(src_folder_id, dst_folder_id, 15)
+
+    if args.mission == "list":
+        src_info = Get(service, src_folder_id)
+        files = ListCurrent(service, src_info)
+        save_list_folder(files)
+    if args.mission == "delete":
+        result = Delete(service, src_folder_id)
+        print(result)
+    if args.mission == "test":
+        # 备份测试
+        SyncBackup(src_folder_id, dst_folder_id, 2)

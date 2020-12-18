@@ -19,6 +19,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 from core.error import *
+from core.config import *
 
 socks.set_default_proxy(socks.HTTP, addr='127.0.0.1', port=7890)  # 设置socks代理
 socket.socket = socks.socksocket  # 把代理应用到socket
@@ -89,6 +90,7 @@ class FileInfo:
         self.parents = None  # 父级文件夹列表, 通常只有一个
         self.mimeType = None  # 文件类型, 文件夹通常为folder
         self.is_folder = False  # 是否为文件夹类型
+        self.is_trashed = False  # 该文件或文件夹是否已经被废弃
         self.mission = mission  #
 
         if from_json:
@@ -119,6 +121,7 @@ class FileInfo:
         self.mimeType = info["mimeType"]
         if "folder" in info["mimeType"]:
             self.is_folder = True
+        self.is_trashed = info["trashed"]
 
     def to_json(self):
         """to_json 将文件信息转成json格式方便进行存储
@@ -136,6 +139,7 @@ class FileInfo:
         info["mission"] = self.mission
         info["mimeType"] = self.mimeType
         info["is_folder"] = self.is_folder
+        info["is_trashed"] = self.is_trashed
 
         return info
 
@@ -154,6 +158,7 @@ class FileInfo:
         self.mimeType = info["mimeType"]
         self.is_folder = info["is_folder"]
         self.md5Checksum = info["md5Checksum"]
+        self.is_trashed = info["is_trashed"]
 
     def __repr__(self):
         string = "\nid: {0}\nmd5: {1}\nname: {2}\nparents: {3}\nis folder: {4}\n".format(
@@ -161,13 +166,19 @@ class FileInfo:
             str(self.is_folder))
         return string
 
+    def __hash__(self):
+        if (self.is_folder):
+            return hash((self.is_folder, self.name))
+        else:
+            return hash((self.is_folder, self.md5Checksum))
+
     def __eq__(self, value):
         # 先判断文件类型
         if (self.is_folder ^ value.is_folder):
             return False  # 如果文件类型不一致, 返回False
         # 文件的判断
         if (self.md5Checksum):
-            return self.md5Checksum == self.md5Checksum
+            return self.md5Checksum == value.md5Checksum
         # 文件夹的判断
         else:
             return self.name == value.name
@@ -206,7 +217,7 @@ class Global:
     TaskStatus = []
 
     # 最大报错累积量
-    CumErrorNum = 20
+    CumErrorNum = 3
 
     # 程序运行过程中产生的信息
     Message = queue.Queue()
@@ -257,12 +268,13 @@ class Global:
         Global.INFO[uid] = files
         Global.add_info_lock.release()
 
+    @staticmethod
+    def clear():
+        Global.SearchFolderQueue.queue.clear()
+        Global.CreateFolderQueue.queue.clear()
+        Global.CreateFileQueue.queue.clear()
 
-class Mission:
-    """ 任务调度
-    """
-    def __init__(self, src, dst=None):
-        self.types = {0: "list", 1: "save"}
+        Parallelism = dict()
 
 
 def save_cache():
@@ -342,6 +354,23 @@ def load_cache():
         Global.CreateFileQueue.put(cur_info)
 
 
+def save_list_folder(files: list, only_folder=True, show=True):
+    list_folder_json = {}
+    for item in files:
+        file_info = FileInfo(item)
+        if (only_folder):
+            if (file_info.is_folder):
+                list_folder_json[file_info.uid] = file_info.to_json()
+                if (show):
+                    print(file_info.name)
+        else:
+            list_folder_json[file_info.uid] = file_info.to_json()
+            if (show):
+                print(file_info.name)
+    with open("data/list_folder.json", "w") as fp:
+        json.dump(list_folder_json, fp)
+
+
 def show_all():
     print("-" * 20)
     print("SearchFolderQueue\n", "####" * 10)
@@ -389,9 +418,11 @@ def process_bar():
         print("process bar start...")
         Global.is_use_process_bar = True
         while (not Global.isExit):
+            folder_num = len(Global.SearchInformation)
             file_num = Global.CreateFileQueue.qsize()
             ignore = file_num == 0
             if not ignore:
+                print("待创建的文件夹: {0}".format(folder_num))
                 print("待创建的文件: {0}".format(file_num))
             time.sleep(6)
         Global.is_use_process_bar = False

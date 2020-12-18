@@ -1,8 +1,10 @@
+import json
+import time
+
 from core.common import FileInfo, Global
+from core.config import *
 from core.error import *
 from core.tools import *
-import time
-import json
 
 
 def Copy(service, src: str, dst: str):
@@ -30,15 +32,15 @@ def Move(service, src: str, dst: str):
 
 
 def Delete(service, src: str):
-    pass
+    results = service.files().delete(fileId=src,
+                                     supportsAllDrives=True).execute()
+    return results
 
 
 def Get(service, src: str):
-    results = service.files().get(
-        fileId=src,
-        supportsAllDrives=True,
-        fields="kind, parents, id, name, mimeType, size, md5Checksum").execute(
-        )
+    results = service.files().get(fileId=src,
+                                  supportsAllDrives=True,
+                                  fields=FIELDS).execute()
     return FileInfo(results)
 
 
@@ -51,6 +53,7 @@ def ListAll(service, src: FileInfo):
     Global.SearchFolderQueue.put(src)
     while (Global.SearchFolderQueue.qsize() > 0):
         current_folder = Global.SearchFolderQueue.get()
+        print(current_folder.name)
         files = ListCurrent(service, current_folder)
         Global.add_folder_information(current_folder)
         for sub_file_info in files:
@@ -81,8 +84,7 @@ def ListCurrent(service, src: FileInfo):
         includeItemsFromAllDrives=True,
         q="'{0}' in parents".format(src.uid),
         supportsAllDrives=True,
-        fields=
-        "nextPageToken, files(id, name, parents, kind, mimeType, size, md5Checksum)",
+        fields="nextPageToken, files({fields})".format(fields=FIELDS),
     ).execute()
     files += results["files"]
 
@@ -94,11 +96,12 @@ def ListCurrent(service, src: FileInfo):
             includeItemsFromAllDrives=True,
             q="'{0}' in parents".format(src.uid),
             supportsAllDrives=True,
-            fields=
-            "nextPageToken, files(id, name, parents, kind, mimeType, size, md5Checksum)",
+            fields="nextPageToken, files({fields})".format(fields=FIELDS),
             pageToken=results["pageToken"],
         ).execute()
         files += results["files"]
+
+    files = [FileInfo(item) for item in files if not item["trashed"]]
     Global.add_info(src.uid, files)
 
     return files
@@ -126,7 +129,7 @@ def CreateFolder(service, src: FileInfo, dst_parent):
     return result["id"]
 
 
-def AddFirst(service, src, parent):
+def AddFirst(service, src: str, parent: str):
     info = Get(service, src)
     Global.SearchFolderQueue.put(info)
     Global.Parallelism[info.parent] = parent

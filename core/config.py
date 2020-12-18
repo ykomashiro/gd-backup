@@ -7,3 +7,4 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive.metadata",
     "https://www.googleapis.com/auth/drive.photos.readonly"
 ]
+FIELDS = "kind, parents, id, name, mimeType, size, md5Checksum, trashed"
